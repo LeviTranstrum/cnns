@@ -1,0 +1,226 @@
+from PIL import Image
+import torch
+from torchvision import datasets, transforms
+import os
+import matplotlib.pyplot
+
+class MyDigits(torch.utils.data.Dataset):
+    def __init__(self):
+        self.transform = transforms.ToTensor()
+        return
+
+    def __len__(self):
+        return 10
+
+    def __getitem__(self, idx):
+        img = Image.open(f'./digits/mydigits/{idx}.bmp').convert('L')
+        return self.transform(img), idx
+
+class DigitClassifier(torch.nn.Module):
+    def __init__(self):
+        super(DigitClassifier, self).__init__()
+        self.norm1 = torch.nn.BatchNorm2d(1)
+        self.conv1 = torch.nn.Conv2d(1, 32, 3, 1)
+        self.conv2 = torch.nn.Conv2d(32, 64, 3, 1)
+        self.pool = torch.nn.MaxPool2d(2)
+        self.norm2 = torch.nn.BatchNorm1d(9216)
+        self.dropout1 = torch.nn.Dropout(0.25)
+        self.fc1 = torch.nn.Linear(9216, 128)
+        self.norm3 = torch.nn.BatchNorm1d(128)
+        self.dropout2 = torch.nn.Dropout(0.25)
+        self.fc2 = torch.nn.Linear(128, 10)
+        self.activation = torch.nn.ReLU()
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        self.lossfunc = torch.nn.CrossEntropyLoss()
+
+    def forward(self, x):
+        x = self.norm1(x)
+        x = self.conv1(x)
+        x = self.activation(x)
+        x = self.conv2(x)
+        x = self.activation(x)
+        x = self.pool(x)
+        x = torch.flatten(x, 1)
+        x = self.norm2(x)
+        x = self.dropout1(x)
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.norm3(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        return x
+
+    def run_training(self, num_epochs=1):
+        dataset = datasets.MNIST('./MNIST', train=True, download=True, transform=transforms.ToTensor())
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=True)
+        running_loss = 0
+        for n in range(num_epochs):
+            self.train()
+            for i, (imgs, labels) in enumerate(dataloader):
+                # print(f'input: {data}')
+
+                # zero gradients for every batch
+                self.optimizer.zero_grad()
+
+                # make predictions for this batch
+                outputs = self(imgs)
+
+                # print(f'outputs: {outputs}')
+
+                # calculate loss and gradients
+                loss = self.lossfunc(outputs, labels)
+                loss.backward()
+
+                # adjust learning weights
+                self.optimizer.step()
+
+                # log
+                running_loss += loss
+                if i != 0 and i % 100 == 0:
+                    print(f'Epoch {n} Batch {i} average loss: {running_loss/100}')
+                    running_loss = 0
+
+            self.save()
+
+    def evaluate(self):
+        dataset = MyDigits()
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=10, shuffle=True)
+
+        self.eval()
+        for data, target in dataloader:
+            output = self(data)
+            predictions = torch.argmax(output, dim=1)
+
+            # Set up the figure with subplots
+            fig, axes = matplotlib.pyplot.subplots(nrows=1, ncols=10, figsize=(15, 1.5))  # Adjust size as needed
+            for ax, img, pred, lbl in zip(axes, data, predictions, target):
+                ax.imshow(img.squeeze().numpy(), cmap='gray')  # Assuming grayscale image
+                ax.set_title(f'{pred.item()}')
+                ax.axis('off')  # Hide axes
+
+            matplotlib.pyplot.show()
+
+
+    def save(self):
+        path = './trained_models/DigitClassifier'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.state_dict(), f'{path}')
+
+    @classmethod
+    def load(cls):
+        print("loading model...")
+        path = './trained_models/DigitClassifier'
+        model = DigitClassifier()
+        try:
+            model.load_state_dict(torch.load(path))
+        except:
+            print(f'No trained model found with the name "DigitClassifier". Creating a new model')
+        return model
+
+# https://github.com/pytorch/examples/blob/main/mnist/main.py
+class PytorchExampleDigitClassifier(torch.nn.Module):
+    def __init__(self):
+        super(DigitClassifier, self).__init__()
+        self.norm1 = torch.nn.BatchNorm2d(1)
+        self.conv1 = torch.nn.Conv2d(1, 32, 3, 1)
+        self.conv2 = torch.nn.Conv2d(32, 64, 3, 1)
+        self.pool = torch.nn.MaxPool2d(2)
+        self.norm2 = torch.nn.BatchNorm1d(9216)
+        self.dropout1 = torch.nn.Dropout(0.25)
+        self.fc1 = torch.nn.Linear(9216, 128)
+        self.norm3 = torch.nn.BatchNorm1d(128)
+        self.dropout2 = torch.nn.Dropout(0.25)
+        self.fc2 = torch.nn.Linear(128, 10)
+        self.activation = torch.nn.ReLU()
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        self.lossfunc = torch.nn.CrossEntropyLoss()
+
+    def forward(self, x):
+        x = self.norm1(x)
+        x = self.conv1(x)
+        x = self.activation(x)
+        x = self.conv2(x)
+        x = self.activation(x)
+        x = self.pool(x)
+        x = torch.flatten(x, 1)
+        x = self.norm2(x)
+        x = self.dropout1(x)
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.norm3(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        return x
+
+    def run_training(self, num_epochs=1):
+        dataset = datasets.MNIST('./MNIST', train=True, download=True, transform=transforms.ToTensor())
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=True)
+        running_loss = 0
+        for n in range(num_epochs):
+            self.train()
+            for i, (imgs, labels) in enumerate(dataloader):
+                # print(f'input: {data}')
+
+                # zero gradients for every batch
+                self.optimizer.zero_grad()
+
+                # make predictions for this batch
+                outputs = self(imgs)
+
+                # print(f'outputs: {outputs}')
+
+                # calculate loss and gradients
+                loss = self.lossfunc(outputs, labels)
+                loss.backward()
+
+                # adjust learning weights
+                self.optimizer.step()
+
+                # log
+                running_loss += loss
+                if i != 0 and i % 100 == 0:
+                    print(f'Epoch {n} Batch {i} average loss: {running_loss/100}')
+                    running_loss = 0
+
+            self.save()
+
+    def evaluate(self):
+        dataset = MyDigits()
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=10, shuffle=True)
+
+        self.eval()
+        for data, target in dataloader:
+            output = self(data)
+            predictions = torch.argmax(output, dim=1)
+
+            # Set up the figure with subplots
+            fig, axes = matplotlib.pyplot.subplots(nrows=1, ncols=10, figsize=(15, 1.5))  # Adjust size as needed
+            for ax, img, pred, lbl in zip(axes, data, predictions, target):
+                ax.imshow(img.squeeze().numpy(), cmap='gray')  # Assuming grayscale image
+                ax.set_title(f'{pred.item()}')
+                ax.axis('off')  # Hide axes
+
+            matplotlib.pyplot.show()
+
+
+    def save(self):
+        path = './trained_models/DigitClassifier'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.state_dict(), f'{path}')
+
+    @classmethod
+    def load(cls):
+        print("loading model...")
+        path = './trained_models/DigitClassifier'
+        model = DigitClassifier()
+        try:
+            model.load_state_dict(torch.load(path))
+        except:
+            print(f'No trained model found with the name "DigitClassifier". Creating a new model')
+        return model
+
+model = DigitClassifier.load()
+# model.run_training(10)
+model.evaluate()
